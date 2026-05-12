@@ -8,27 +8,37 @@
 import re
 from collections import Counter
 
+# Минимальная длина слова. Однобуквенные токены (предлоги, союзы,
+# частицы — в, к, о, с, у, а, и и др.) исключаются из подсчёта.
+_MIN_WORD_LEN: int = 2
+
 
 def _extract_words(text: str) -> list[str]:
     """Извлечь слова из текста, приводя к нижнему регистру.
+
+    Однобуквенные токены (предлоги, союзы, частицы)
+    исключаются из результата.
 
     Args:
         text: Исходный текст.
 
     Returns:
-        Список слов в нижнем регистре.
+        Список слов длиной от _MIN_WORD_LEN символов.
     """
-    return re.findall(r"[^\W\d_]+", text.lower())
+    words = re.findall(r"[^\W\d_]+", text.lower())
+    return [w for w in words if len(w) >= _MIN_WORD_LEN]
 
 
 def word_count(text: str) -> int:
     """Подсчитать количество слов в тексте.
 
+    Однобуквенные токены исключаются из подсчёта.
+
     Args:
         text: Исходный текст.
 
     Returns:
-        Число слов в тексте.
+        Число слов в тексте (длиной от 2 символов).
     """
     return len(_extract_words(text))
 
@@ -87,22 +97,18 @@ def top_words(text: str, n: int = 5) -> list[tuple[str, int]]:
 if __name__ == "__main__":
     import sys
 
-    # Читаем stdin как сырые байты и пробуем декодировать.
-    # На Windows команда type может транскодировать файл
-    # в кодировку консоли (cp866/cp1251), поэтому пробуем
-    # несколько кодировок: UTF-8 → cp1251 → cp866 → latin-1.
+    # UTF-8 strict → кодировка консоли → fallback cp866.
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     raw = sys.stdin.buffer.read()
-    for enc in ("utf-8", "cp1251", "cp866", "latin-1"):
+    console_enc = getattr(sys.stdin, "encoding", None) or "cp866"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
         try:
-            text = raw.decode(enc)
-            # Если кириллица распознана — кодировка верная
-            if any("\u0400" <= ch <= "\u04FF" for ch in text[:200]):
-                break
-        except UnicodeDecodeError:
-            continue
-    else:
-        text = raw.decode("utf-8", errors="replace")
+            text = raw.decode(console_enc)
+        except (UnicodeDecodeError, LookupError):
+            text = raw.decode("cp866", errors="replace")
+
     print(f"Слов: {word_count(text)}")
     print(f"Предложений: {sentence_count(text)}")
     print(f"Средняя длина слова: {avg_word_length(text):.1f}")

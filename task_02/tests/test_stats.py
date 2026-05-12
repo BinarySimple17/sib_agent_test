@@ -98,17 +98,17 @@ def test_avg_word_length_russian() -> None:
 
 def test_top_words_default_n() -> None:
     """Топ-5 по умолчанию."""
-    text = "a a a b b c"
+    text = "apple apple apple berry berry cherry"
     result = top_words(text)
     assert len(result) <= 5
-    assert result[0] == ("a", 3)
+    assert result[0] == ("apple", 3)
 
 
 def test_top_words_custom_n() -> None:
     """Топ-2 с явным n."""
-    text = "x x y z"
+    text = "alpha alpha beta gamma"
     result = top_words(text, n=2)
-    assert result == [("x", 2), ("y", 1)]
+    assert result == [("alpha", 2), ("beta", 1)]
 
 
 def test_top_words_empty() -> None:
@@ -134,3 +134,28 @@ def test_top_words_russian() -> None:
     text = "кот кот собака"
     result = top_words(text, n=2)
     assert result[0] == ("кот", 2)
+
+
+# --- single-letter exclusion ---
+
+
+def test_word_count_excludes_single_letter() -> None:
+    """Однобуквенные токены не считаются словами."""
+    # «в» и «с» — 1 буква, исключаются; «на» — 2 буквы, остаётся
+    assert word_count("кот в доме на столе с кошкой") == 5
+
+
+def test_avg_word_length_excludes_single_letter() -> None:
+    """Средняя длина считается без однобуквенных токенов."""
+    # Только «кот»=3 и «доме»=4 → (3+4)/2 = 3.5
+    assert avg_word_length("кот в доме") == 3.5
+
+
+def test_top_words_excludes_single_letter() -> None:
+    """Однобуквенные токены не попадают в топ слов."""
+    text = "кот на кот в дом"
+    result = top_words(text, n=3)
+    words_only = [w for w, _ in result]
+    assert "в" not in words_only
+    # «на» — 2 буквы, теперь НЕ исключается
+    assert ("кот", 2) in result
