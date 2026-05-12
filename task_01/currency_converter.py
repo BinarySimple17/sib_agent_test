@@ -16,55 +16,21 @@
 """
 
 import argparse
+import csv
 import re
 import sys
 import urllib.request
 import urllib.error
 from decimal import Decimal, ROUND_HALF_UP
 from html.parser import HTMLParser
+from pathlib import Path
 
 
 # URL страницы с ежедневными курсами ЦБ РФ
 CBR_DAILY_URL = "https://www.cbr.ru/currency_base/daily/"
 
-# Фиксированные курсы относительно RUB (fallback при недоступности сайта ЦБ)
-# Формат: буквенный код -> (номинал, курс за номинал в RUB)
-FALLBACK_RATES: dict[str, tuple[int, float]] = {
-    "AUD": (1, 53.6791),
-    "AZN": (1, 43.7037),
-    "BYN": (1, 26.4654),
-    "BGN": (1, 45.2890),
-    "BRL": (1, 15.1110),
-    "HUF": (100, 24.6104),
-    "HKD": (10, 94.8867),
-    "DKK": (1, 11.7022),
-    "AED": (1, 20.2304),
-    "USD": (1, 74.2963),
-    "EUR": (1, 88.5490),
-    "EGP": (10, 14.0988),
-    "INR": (100, 78.6733),
-    "KZT": (100, 16.0325),
-    "CNY": (1, 10.0000),
-    "KGS": (100, 84.9873),
-    "CAD": (1, 54.4894),
-    "MDL": (10, 43.3124),
-    "NOK": (10, 80.4665),
-    "PLN": (1, 20.6683),
-    "RON": (1, 16.6984),
-    "XDR": (1, 102.2235),
-    "SGD": (1, 58.5517),
-    "TJS": (10, 79.3162),
-    "TRY": (10, 16.4382),
-    "TMT": (1, 21.2275),
-    "UZS": (10000, 61.1898),
-    "UAH": (10, 16.9414),
-    "GBP": (1, 101.2733),
-    "CZK": (10, 35.9823),
-    "SEK": (10, 80.7822),
-    "CHF": (1, 95.4597),
-    "KRW": (1000, 51.2106),
-    "JPY": (100, 47.3255),
-}
+# Путь к CSV-файлу с фиксированными курсами (fallback при недоступности сайта ЦБ)
+FALLBACK_CSV = Path(__file__).resolve().parent / "fallback_rates.csv"
 
 
 class CBRTableParser(HTMLParser):
@@ -158,16 +124,49 @@ def fetch_cbr_rates() -> dict[str, tuple[int, Decimal]]:
     return rates
 
 
+def load_fallback_rates_csv(csv_path: Path = FALLBACK_CSV) -> dict[str, tuple[int, Decimal]]:
+    """Загружает фиксированные курсы из CSV-файла.
+
+    Ожидаемый формат CSV: currency,nominal,rate
+    Например: USD,1,74.2963
+
+    Args:
+        csv_path: Путь к CSV-файлу с курсами.
+
+    Returns:
+        Словарь {буквенный_код: (номинал, курс_за_номинал_в_RUB)}.
+
+    Raises:
+        FileNotFoundError: Если CSV-файл не найден.
+    """
+    rates: dict[str, tuple[int, Decimal]] = {"RUB": (1, Decimal("1"))}
+    with open(csv_path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            code = row["currency"].strip()
+            nominal = int(row["nominal"])
+            rate = Decimal(row["rate"])
+            rates[code] = (nominal, rate)
+    return rates
+
+
 def get_fallback_rates() -> dict[str, tuple[int, Decimal]]:
     """Возвращает фиксированные курсы (fallback).
+
+    Загружает курсы из CSV-файла fallback_rates.csv.
+    Если файл не найден, возвращает минимальный набор (только RUB).
 
     Returns:
         Словарь {буквенный_код: (номинал, курс_за_номинал_в_RUB)}.
     """
-    rates: dict[str, tuple[int, Decimal]] = {"RUB": (1, Decimal("1"))}
-    for code, (nominal, rate) in FALLBACK_RATES.items():
-        rates[code] = (nominal, Decimal(str(rate)))
-    return rates
+    try:
+        return load_fallback_rates_csv()
+    except FileNotFoundError:
+        print(
+            f"⚠ Файл {FALLBACK_CSV} не найден, доступна только валюта RUB",
+            file=sys.stderr,
+        )
+        return {"RUB": (1, Decimal("1"))}
 
 
 def rate_to_rub(currency: str, rates: dict[str, tuple[int, Decimal]]) -> Decimal:
